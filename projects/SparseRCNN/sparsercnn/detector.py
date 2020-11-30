@@ -48,10 +48,19 @@ class SparseRCNN(nn.Module):
         self.hidden_dim = cfg.MODEL.SparseRCNN.HIDDEN_DIM
         self.num_heads = cfg.MODEL.SparseRCNN.NUM_HEADS
 
+        self.use_stn = cfg.MODEL.SparseRCNN.USE_STN
+
         # Build Backbone.
         self.backbone = build_backbone(cfg)
         self.size_divisibility = self.backbone.size_divisibility
         
+        # Building Spatial Transformer Layer
+        # pyramid_layers = len(self.in_features)
+        # num_proposals_per_layer = self.num_proposals // pyramid_layers
+        if self.use_stn:
+            self.stn_conv = nn.Conv2d(256, self.num_proposals, 3, 1, 1)
+            self.stn_fc = nn.Linear(864, 4)
+
         # Build Proposals.
         self.init_proposal_features = nn.Embedding(self.num_proposals, self.hidden_dim)
         self.init_proposal_boxes = nn.Embedding(self.num_proposals, 4)
@@ -124,10 +133,17 @@ class SparseRCNN(nn.Module):
             feature = src[f]
             features.append(feature)
 
-        # Prepare Proposals.
-        proposal_boxes = self.init_proposal_boxes.weight.clone()
-        proposal_boxes = box_cxcywh_to_xyxy(proposal_boxes)
-        proposal_boxes = proposal_boxes[None] * images_whwh[:, None, :]
+        # Prepare Proposals.        
+        if self.use_stn:
+            stn_conv_feat = self.stn_conv(features[-1])  # B x 100 x H x W
+            stn_fc_feat = self.stn_fc(stn_conv_feat.view(stn_conv_feat.shape[0], stn_conv_feat.shape[1], -1)) # B x 100 x 4
+            proposal_boxes = torch.sigmoid(stn_fc_feat)
+            proposal_boxes = box_cxcywh_to_xyxy(proposal_boxes)
+            proposal_boxes = proposal_boxes * images_whwh[:, None, :]
+        else:
+            proposal_boxes = self.init_proposal_boxes.weight.clone()
+            proposal_boxes = box_cxcywh_to_xyxy(proposal_boxes)
+            proposal_boxes = proposal_boxes[None] * images_whwh[:, None, :]
 
         # Prediction.
         outputs_class, outputs_coord = self.head(features, proposal_boxes, self.init_proposal_features.weight)

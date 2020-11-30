@@ -15,6 +15,9 @@ def add_sparsercnn_config(cfg):
     cfg.MODEL.SparseRCNN.NUM_CLASSES = 80
     cfg.MODEL.SparseRCNN.NUM_PROPOSALS = 300
 
+    # STN (Spatial Transformer Network)
+    cfg.MODEL.SparseRCNN.USE_STN = False
+
     # RCNN Head.
     cfg.MODEL.SparseRCNN.NHEADS = 8
     cfg.MODEL.SparseRCNN.DROPOUT = 0.0
